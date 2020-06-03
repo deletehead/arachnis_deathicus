@@ -129,7 +129,7 @@ def main():
 if __name__ == "__main__":
     main()
 
-class smb_spider(smbClient):
+class smb_spider(cmd.Cmd):
     def __init__(self, smbClient, tcpShell=None):
         #If the tcpShell parameter is passed (used in ntlmrelayx),
         # all input and output is redirected to a tcp socket
