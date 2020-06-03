@@ -12,5 +12,6 @@ This tool should:
  - List accessible shares on a network based on provided credentials
  - Have the option to do a directory listing of these shares with a specified depth
  - Be able to spider shares for interesting files
+
 Extra Credit:
  - Be able to parse through Group Policy settings from `SYSVOL` on a DC
