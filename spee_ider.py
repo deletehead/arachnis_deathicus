@@ -37,20 +37,9 @@ except ImportError:
   import readline
 
 class spee_ider(cmd.Cmd):
-    def __init__(self, smbClient,tcpShell=None):
-        #If the tcpShell parameter is passed (used in ntlmrelayx),
-        # all input and output is redirected to a tcp socket
-        # instead of to stdin / stdout
-        if tcpShell is not None:
-            cmd.Cmd.__init__(self,stdin=tcpShell,stdout=tcpShell)
-            sys.stdout = tcpShell
-            sys.stdin = tcpShell
-            sys.stderr = tcpShell
-            self.use_rawinput = False
-            self.shell = tcpShell
-        else:
-            cmd.Cmd.__init__(self)
-            self.shell = None
+    def __init__(self, smbClient, depth=3):
+        cmd.Cmd.__init__(self)
+        self.shell = None
 
         self.prompt = '# '
         self.smb = smbClient
@@ -62,6 +51,28 @@ class spee_ider(cmd.Cmd):
         self.loggedIn = True
         self.last_output = None
         self.completion = []
+        self.depth=depth
+
+    def spee_ider_host(self):
+        print('[*] Spidering Shares with depth '+str(self.depth))
+        try:
+            self.get_info()
+        except:
+            print('[-] Not enough privs to get info...')
+        shares = self.get_shares()
+        for i in range(len(shares)):
+            share = shares[i]['shi1_netname'][:-1]
+            if share != 'C$' and share != 'ADMIN$' and share != 'IPC$':
+                try:
+                    self.share = share
+                    self.tid = self.smb.connectTree(share)
+                    self.pwd = '\\'
+                    print('[+] Access Granted: '+share)
+                    self.do_ls('', True)
+                except:
+                    print('[-] Access Denied: '+share)
+                    continue 
+                
 
     def emptyline(self):
         pass
@@ -86,39 +97,6 @@ class spee_ider(cmd.Cmd):
         if self.shell is not None:
             self.shell.close()
         return True
-
-    def do_shell(self, line):
-        output = os.popen(line).read()
-        print(output)
-        self.last_output = output
-
-    def do_help(self,line):
-        print("""
- open {host,port=445} - opens a SMB connection against the target host/port
- login {domain/username,passwd} - logs into the current SMB connection, no parameters for NULL connection. If no password specified, it'll be prompted
- kerberos_login {domain/username,passwd} - logs into the current SMB connection using Kerberos. If no password specified, it'll be prompted. Use the DNS resolvable domain name
- login_hash {domain/username,lmhash:nthash} - logs into the current SMB connection using the password hashes
- logoff - logs off
- shares - list available shares
- use {sharename} - connect to an specific share
- cd {path} - changes the current directory to {path}
- lcd {path} - changes the current local directory to {path}
- pwd - shows current remote directory
- password - changes the user password, the new password will be prompted for input
- ls {wildcard} - lists all the files in the current directory
- rm {file} - removes the selected file
- mkdir {dirname} - creates the directory under the current path
- rmdir {dirname} - removes the directory under the current path
- put {filename} - uploads the filename into the current path
- get {filename} - downloads the filename from the current path
- mount {target,path} - creates a mount point from {path} to {target} (admin required)
- umount {path} - removes the mount point at {path} without deleting the directory (admin required)
- info - returns NetrServerInfo main results
- who - returns the sessions currently connected at the target host (admin required)
- close - closes the current SMB Session
- exit - terminates the server process (and this session)
-
-""")
 
     def do_password(self, line):
         if self.loggedIn is False:
@@ -278,10 +256,7 @@ class spee_ider(cmd.Cmd):
         self.nthash = None
         self.username = None
 
-    def do_info(self, line):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
+    def get_info(self):
         rpctransport = transport.SMBTransport(self.smb.getRemoteHost(), filename = r'\srvsvc', smb_connection = self.smb)
         dce = rpctransport.get_dce_rpc()
         dce.connect()
@@ -295,37 +270,11 @@ class spee_ider(cmd.Cmd):
         print("Server UserPath: %s" % resp['InfoStruct']['ServerInfo102']['sv102_userpath'])
         print("Simultaneous Users: %d" % resp['InfoStruct']['ServerInfo102']['sv102_users'])
 
-    def do_who(self, line):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
-        rpctransport = transport.SMBTransport(self.smb.getRemoteHost(), filename = r'\srvsvc', smb_connection = self.smb)
-        dce = rpctransport.get_dce_rpc()
-        dce.connect()
-        dce.bind(srvs.MSRPC_UUID_SRVS)
-        resp = srvs.hNetrSessionEnum(dce, NULL, NULL, 10)
-
-        for session in resp['InfoStruct']['SessionInfo']['Level10']['Buffer']:
-            print("host: %15s, user: %5s, active: %5d, idle: %5d" % (
-            session['sesi10_cname'][:-1], session['sesi10_username'][:-1], session['sesi10_time'],
-            session['sesi10_idle_time']))
-
-    def do_shares(self, line):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
-        resp = self.smb.listShares()
-        for i in range(len(resp)):
-            print(resp[i]['shi1_netname'][:-1])
-
-    def do_use(self,line):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
-        self.share = line
-        self.tid = self.smb.connectTree(line)
-        self.pwd = '\\'
-        self.do_ls('', False)
+    def get_shares(self):
+        shares_list = self.smb.listShares()
+        for i in range(len(shares_list)):
+            print(shares_list[i]['shi1_netname'][:-1])
+        return shares_list
 
     def complete_cd(self, text, line, begidx, endidx):
         return self.complete_get(text, line, begidx, endidx, include = 2)
@@ -350,19 +299,6 @@ class spee_ider(cmd.Cmd):
             self.pwd = oldpwd
             raise
 
-    def do_lcd(self, s):
-        print(s)
-        if s == '':
-           print(os.getcwd())
-        else:
-           os.chdir(s)
-
-    def do_pwd(self,line):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
-        print(self.pwd)
-
     def do_ls(self, wildcard, display = True):
         if self.loggedIn is False:
             LOG.error("Not logged in")
@@ -384,43 +320,26 @@ class spee_ider(cmd.Cmd):
                 f.get_longname()))
             self.completion.append((f.get_longname(), f.is_directory()))
 
-
-    def do_rm(self, filename):
+    def ls_depth(self, wildcard, display = True):
+        if self.loggedIn is False:
+            LOG.error("Not logged in")
+            return
         if self.tid is None:
             LOG.error("No share selected")
             return
-        f = ntpath.join(self.pwd, filename)
-        file = f.replace('/','\\')
-        self.smb.deleteFile(self.share, file)
-
-    def do_mkdir(self, path):
-        if self.tid is None:
-            LOG.error("No share selected")
-            return
-        p = ntpath.join(self.pwd, path)
-        pathname = p.replace('/','\\')
-        self.smb.createDirectory(self.share,pathname)
-
-    def do_rmdir(self, path):
-        if self.tid is None:
-            LOG.error("No share selected")
-            return
-        p = ntpath.join(self.pwd, path)
-        pathname = p.replace('/','\\')
-        self.smb.deleteDirectory(self.share, pathname)
-
-    def do_put(self, pathname):
-        if self.tid is None:
-            LOG.error("No share selected")
-            return
-        src_path = pathname
-        dst_name = os.path.basename(src_path)
-
-        fh = open(pathname, 'rb')
-        f = ntpath.join(self.pwd,dst_name)
-        finalpath = f.replace('/','\\')
-        self.smb.putFile(self.share, finalpath, fh.read)
-        fh.close()
+        if wildcard == '':
+           pwd = ntpath.join(self.pwd,'*')
+        else:
+           pwd = ntpath.join(self.pwd, wildcard)
+        self.completion = []
+        pwd = pwd.replace('/','\\')
+        pwd = ntpath.normpath(pwd)
+        for f in self.smb.listPath(self.share, pwd):
+            if display is True:
+                print("%crw-rw-rw- %10d  %s %s" % (
+                'd' if f.is_directory() > 0 else '-', f.get_filesize(), time.ctime(float(f.get_mtime_epoch())),
+                f.get_longname()))
+            self.completion.append((f.get_longname(), f.is_directory()))
 
     def complete_get(self, text, line, begidx, endidx, include = 1):
         # include means
@@ -461,29 +380,6 @@ class spee_ider(cmd.Cmd):
 
     def do_close(self, line):
         self.do_logoff(line)
-
-    def do_mount(self, line):
-        l = line.split(' ')
-        if len(l) > 1:
-            target  = l[0].replace('/','\\')
-            pathName= l[1].replace('/','\\')
-
-        # Relative or absolute path?
-        if pathName.startswith('\\') is not True:
-            pathName = ntpath.join(self.pwd, pathName)
-
-        self.smb.createMountPoint(self.tid, pathName, target)
-
-    def do_umount(self, mountpoint):
-        mountpoint = mountpoint.replace('/','\\')
-
-        # Relative or absolute path?
-        if mountpoint.startswith('\\') is not True:
-            mountpoint = ntpath.join(self.pwd, mountpoint)
-
-        mountPath = ntpath.join(self.pwd, mountpoint)
-
-        self.smb.removeMountPoint(self.tid, mountPath)
 
     def do_EOF(self, line):
         print('Bye!\n')

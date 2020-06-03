@@ -105,6 +105,7 @@ def main():
 
         #shell = MiniImpacketShell(smbClient)
         shell = spee_ider(smbClient)
+        shell.spee_ider_host()
 
         if options.file is not None:
             logging.info("Executing commands from %s" % options.file.name)
@@ -115,7 +116,8 @@ def main():
                 else:
                     print(line, end=' ')
         else:
-            shell.cmdloop()
+            print('[placeholder for cmdloop]')
+            #shell.cmdloop()
     except Exception as e:
         if logging.getLogger().level == logging.DEBUG:
             import traceback
