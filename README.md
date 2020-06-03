@@ -9,8 +9,8 @@ Tool to spider SMB shares during pentests. I haven't found anything that I've lo
 
 ## Requirements
 This tool should:
-    - List accessible shares on a network based on provided credentials
-    - Have the option to do a directory listing of these shares with a specified depth
-    - Be able to spider shares for interesting files
+ - List accessible shares on a network based on provided credentials
+ - Have the option to do a directory listing of these shares with a specified depth
+ - Be able to spider shares for interesting files
 Extra Credit:
-    - Be able to parse through Group Policy settings from `SYSVOL` on a DC
+ - Be able to parse through Group Policy settings from `SYSVOL` on a DC
