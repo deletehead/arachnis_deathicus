@@ -22,6 +22,7 @@
 from __future__ import division
 from __future__ import print_function
 import sys
+import cmd
 import logging
 import argparse
 from impacket.examples import logger
