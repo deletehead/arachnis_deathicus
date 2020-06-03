@@ -5,3 +5,4 @@ Tool to spider SMB shares during pentests. I haven't found anything that I've lo
 
 > Megamind: Spider? Uh... Ah yes, the spee-iiider. Even the smallest bite from... "arachnis deathicus"... will instantly paralyze...AHHHHHH get it off me!
 
+![](img/spee-ider.jpeg)
