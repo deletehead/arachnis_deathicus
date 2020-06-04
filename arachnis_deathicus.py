@@ -107,6 +107,7 @@ def main():
         shell = spee_ider(smbClient)
         shell.spee_ider_host()
 
+        '''
         if options.file is not None:
             logging.info("Executing commands from %s" % options.file.name)
             for line in options.file.readlines():
@@ -118,6 +119,7 @@ def main():
         else:
             print('[placeholder for cmdloop]')
             #shell.cmdloop()
+        '''
     except Exception as e:
         if logging.getLogger().level == logging.DEBUG:
             import traceback

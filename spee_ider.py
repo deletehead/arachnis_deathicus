@@ -68,11 +68,11 @@ class spee_ider(cmd.Cmd):
                     self.tid = self.smb.connectTree(share)
                     self.pwd = '\\'
                     print('[+] Access Granted: '+share)
-                    self.do_ls('', True)
+                    self.ls_main(share)
                 except:
                     print('[-] Access Denied: '+share)
                     continue 
-                
+            
 
     def emptyline(self):
         pass
@@ -97,148 +97,6 @@ class spee_ider(cmd.Cmd):
         if self.shell is not None:
             self.shell.close()
         return True
-
-    def do_password(self, line):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
-        from getpass import getpass
-        newPassword = getpass("New Password:")
-        rpctransport = transport.SMBTransport(self.smb.getRemoteHost(), filename = r'\samr', smb_connection = self.smb)
-        dce = rpctransport.get_dce_rpc()
-        dce.connect()
-        dce.bind(samr.MSRPC_UUID_SAMR)
-        samr.hSamrUnicodeChangePasswordUser2(dce, '\x00', self.username, self.password, newPassword, self.lmhash, self.nthash)
-        self.password = newPassword
-        self.lmhash = None
-        self.nthash = None
-
-    def do_open(self,line):
-        l = line.split(' ')
-        port = 445
-        if len(l) > 0:
-           host = l[0]
-        if len(l) > 1:
-           port = int(l[1])
-
-
-        if port == 139:
-            self.smb = SMBConnection('*SMBSERVER', host, sess_port=port)
-        else:
-            self.smb = SMBConnection(host, host, sess_port=port)
-
-        dialect = self.smb.getDialect()
-        if dialect == SMB_DIALECT:
-            LOG.info("SMBv1 dialect used")
-        elif dialect == SMB2_DIALECT_002:
-            LOG.info("SMBv2.0 dialect used")
-        elif dialect == SMB2_DIALECT_21:
-            LOG.info("SMBv2.1 dialect used")
-        else:
-            LOG.info("SMBv3.0 dialect used")
-
-        self.share = None
-        self.tid = None
-        self.pwd = ''
-        self.loggedIn = False
-        self.password = None
-        self.lmhash = None
-        self.nthash = None
-        self.username = None
-
-    def do_login(self,line):
-        if self.smb is None:
-            LOG.error("No connection open")
-            return
-        l = line.split(' ')
-        username = ''
-        password = ''
-        domain = ''
-        if len(l) > 0:
-           username = l[0]
-        if len(l) > 1:
-           password = l[1]
-
-        if username.find('/') > 0:
-           domain, username = username.split('/')
-
-        if password == '' and username != '':
-            from getpass import getpass
-            password = getpass("Password:")
-
-        self.smb.login(username, password, domain=domain)
-        self.password = password
-        self.username = username
-
-        if self.smb.isGuestSession() > 0:
-            LOG.info("GUEST Session Granted")
-        else:
-            LOG.info("USER Session Granted")
-        self.loggedIn = True
-
-    def do_kerberos_login(self,line):
-        if self.smb is None:
-            LOG.error("No connection open")
-            return
-        l = line.split(' ')
-        username = ''
-        password = ''
-        domain = ''
-        if len(l) > 0:
-           username = l[0]
-        if len(l) > 1:
-           password = l[1]
-
-        if username.find('/') > 0:
-           domain, username = username.split('/')
-
-        if domain == '':
-            LOG.error("Domain must be specified for Kerberos login")
-            return
-
-        if password == '' and username != '':
-            from getpass import getpass
-            password = getpass("Password:")
-
-        self.smb.kerberosLogin(username, password, domain=domain)
-        self.password = password
-        self.username = username
-
-        if self.smb.isGuestSession() > 0:
-            LOG.info("GUEST Session Granted")
-        else:
-            LOG.info("USER Session Granted")
-        self.loggedIn = True
-
-    def do_login_hash(self,line):
-        if self.smb is None:
-            LOG.error("No connection open")
-            return
-        l = line.split(' ')
-        domain = ''
-        if len(l) > 0:
-           username = l[0]
-        if len(l) > 1:
-           hashes = l[1]
-        else:
-           LOG.error("Hashes needed. Format is lmhash:nthash")
-           return
-
-        if username.find('/') > 0:
-           domain, username = username.split('/')
-
-        lmhash, nthash = hashes.split(':')
-
-        self.smb.login(username, '', domain,lmhash=lmhash, nthash=nthash)
-        self.username = username
-        self.lmhash = lmhash
-        self.nthash = nthash
-
-        if self.smb.isGuestSession() > 0:
-            LOG.info("GUEST Session Granted")
-        else:
-            LOG.info("USER Session Granted")
-        self.loggedIn = True
 
     def do_logoff(self, line):
         if self.smb is None:
@@ -299,47 +157,37 @@ class spee_ider(cmd.Cmd):
             self.pwd = oldpwd
             raise
 
-    def do_ls(self, wildcard, display = True):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
-        if self.tid is None:
-            LOG.error("No share selected")
-            return
-        if wildcard == '':
-           pwd = ntpath.join(self.pwd,'*')
-        else:
-           pwd = ntpath.join(self.pwd, wildcard)
-        self.completion = []
-        pwd = pwd.replace('/','\\')
-        pwd = ntpath.normpath(pwd)
-        for f in self.smb.listPath(self.share, pwd):
-            if display is True:
-                print("%crw-rw-rw- %10d  %s %s" % (
-                'd' if f.is_directory() > 0 else '-', f.get_filesize(), time.ctime(float(f.get_mtime_epoch())),
-                f.get_longname()))
-            self.completion.append((f.get_longname(), f.is_directory()))
+    def ls_contents(self, pwd):
+        base_dir = pwd.strip('*')
+        contents_of_dir = []
+        try:
+            for f in self.smb.listPath(self.share, pwd):
+                if f.get_longname() != '.' and f.get_longname() != '..':
+                    print(self.share+base_dir+f.get_longname())
+                    if f.is_directory():
+                        contents_of_dir.append(f.get_longname())
+        except:
+            #print('[-] Error listing contents of: '+base_dir)
+            pass
 
-    def ls_depth(self, wildcard, display = True):
-        if self.loggedIn is False:
-            LOG.error("Not logged in")
-            return
-        if self.tid is None:
-            LOG.error("No share selected")
-            return
-        if wildcard == '':
-           pwd = ntpath.join(self.pwd,'*')
-        else:
-           pwd = ntpath.join(self.pwd, wildcard)
-        self.completion = []
-        pwd = pwd.replace('/','\\')
-        pwd = ntpath.normpath(pwd)
-        for f in self.smb.listPath(self.share, pwd):
-            if display is True:
-                print("%crw-rw-rw- %10d  %s %s" % (
-                'd' if f.is_directory() > 0 else '-', f.get_filesize(), time.ctime(float(f.get_mtime_epoch())),
-                f.get_longname()))
-            self.completion.append((f.get_longname(), f.is_directory()))
+        return contents_of_dir
+
+    def ls_main(self, share):
+        base_wildcard = '\\*'
+        subdirs = self.ls_contents(base_wildcard)
+        current_depth = 1
+        for subdir in subdirs:
+            home_base1 = '\\' + subdir
+            pwd = home_base1 + base_wildcard
+            sub_subdirs = self.ls_contents(pwd)
+            for sub_subdir in sub_subdirs:
+                home_base2 = home_base1 + '\\' + sub_subdir
+                pwd = home_base2 + base_wildcard
+                sub_sub_subdirs = self.ls_contents(pwd)
+                for sub_sub_subdir in sub_sub_subdirs:
+                    home_base3 = home_base2 + '\\' + sub_sub_subdir
+                    pwd = home_base3 + base_wildcard
+                    sub_subdirs = self.ls_contents(pwd)
 
     def complete_get(self, text, line, begidx, endidx, include = 1):
         # include means
