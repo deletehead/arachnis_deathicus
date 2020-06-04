@@ -16,6 +16,13 @@ This tool should:
 Extra Credit:
  - Be able to parse through Group Policy settings from `SYSVOL` on a DC
 
+## Quick Usage
+This follows Impacket's `smbclient.py`. It's fairly straightforward. Currently, it only recurses 3 directories and the code for this is absolutely janky. Don't you judge me, Paul Blart.
+
+'''
+./arachnis_deathicus.py pineapple.underthesea.local/misterkrabs:'Ar3Ar3Ar3!'@thekrustycrab
+'''
+
 ## Acknowledgements
 Most of this has been Frankensteined together from other scripts, so thanks to the authors of:
  - Impacket (specifically `smbclient.py`)
